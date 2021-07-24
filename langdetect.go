@@ -74,6 +74,7 @@ func (a Languages) Detect(ctx Context) string {
 	lang = ctx.Cookie(LangVarName)
 	if a.IsSupported(lang) {
 		hasCookie = true
+		return lang
 	}
 	lang = a.DetectFromHeader(ctx)
 	return lang
