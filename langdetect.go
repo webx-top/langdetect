@@ -8,9 +8,24 @@ import (
 
 var LangVarName = `lang`
 
-type Languages map[string]bool
+func New(fallback string, supported map[string]bool) *Languages {
+	if supported == nil {
+		supported = make(map[string]bool)
+	}
+	return &Languages{
+		Fallback:  fallback,
+		Supported: supported,
+		VarName:   LangVarName,
+	}
+}
 
-func (a Languages) DetectFromURIPath(ctx Context) string {
+type Languages struct {
+	Supported map[string]bool
+	Fallback  string
+	VarName   string
+}
+
+func (a *Languages) DetectFromURIPath(ctx Context) string {
 	p := strings.TrimPrefix(ctx.Path(), `/`)
 	s := strings.Index(p, `/`)
 	var lang string
@@ -20,7 +35,7 @@ func (a Languages) DetectFromURIPath(ctx Context) string {
 		lang = p
 	}
 	if len(lang) > 0 {
-		on, ok := a[lang]
+		on, ok := a.Supported[lang]
 		if !ok {
 			return ``
 		}
@@ -32,9 +47,9 @@ func (a Languages) DetectFromURIPath(ctx Context) string {
 	return lang
 }
 
-func (a Languages) IsSupported(lang string) bool {
+func (a *Languages) IsSupported(lang string) bool {
 	if len(lang) > 0 {
-		if on, ok := a[lang]; ok {
+		if on, ok := a.Supported[lang]; ok {
 			return on
 		}
 	}
@@ -43,7 +58,7 @@ func (a Languages) IsSupported(lang string) bool {
 
 var headerAcceptRemove = regexp.MustCompile(`;[\s]*q=[0-9.]+`)
 
-func (a Languages) DetectFromHeader(ctx Context) string {
+func (a *Languages) DetectFromHeader(ctx Context) string {
 	al := ctx.Header(`Accept-Language`)
 	al = headerAcceptRemove.ReplaceAllString(al, ``)
 	lg := strings.SplitN(al, `,`, 5)
@@ -56,12 +71,12 @@ func (a Languages) DetectFromHeader(ctx Context) string {
 	return ``
 }
 
-func (a Languages) Detect(ctx Context) string {
-	lang := ctx.Query(LangVarName)
+func (a *Languages) Detect(ctx Context) string {
+	lang := ctx.Query(a.VarName)
 	var hasCookie bool
 	defer func() {
 		if !hasCookie {
-			ctx.SetCookie(LangVarName, lang)
+			ctx.SetCookie(a.VarName, lang)
 		}
 	}()
 	if a.IsSupported(lang) {
@@ -71,15 +86,18 @@ func (a Languages) Detect(ctx Context) string {
 	if a.IsSupported(lang) {
 		return lang
 	}
-	lang = ctx.Cookie(LangVarName)
+	lang = ctx.Cookie(a.VarName)
 	if a.IsSupported(lang) {
 		hasCookie = true
 		return lang
 	}
 	lang = a.DetectFromHeader(ctx)
+	if len(lang) == 0 {
+		lang = a.Fallback
+	}
 	return lang
 }
 
-func (a Languages) DetectFromRequest(r *http.Request, w http.ResponseWriter) string {
+func (a *Languages) DetectFromRequest(r *http.Request, w http.ResponseWriter) string {
 	return a.Detect(NewContextStandard(r, w))
 }
